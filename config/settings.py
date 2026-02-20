@@ -1,13 +1,14 @@
-from pathlib import Path
 import os
-import dj_database_url
 from datetime import timedelta
+from pathlib import Path
+
+import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'insecure-dev-key')
-DEBUG = os.getenv('DJANGO_DEBUG', 'true').lower() == 'true'
-ALLOWED_HOSTS = [x.strip() for x in os.getenv('DJANGO_ALLOWED_HOSTS', '*').split(',') if x.strip()]
+SECRET_KEY = os.environ.get('SECRET_KEY')
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = [x.strip() for x in os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if x.strip()]
 
 INSTALLED_APPS = [
@@ -52,7 +53,11 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
-    'default': dj_database_url.config(default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}", conn_max_age=600)
+    'default': dj_database_url.parse(
+        os.environ.get('DATABASE_URL'),
+        conn_max_age=600,
+        ssl_require=True,
+    )
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -67,10 +72,16 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = '/static/'
+STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
