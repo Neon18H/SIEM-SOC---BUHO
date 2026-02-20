@@ -154,8 +154,9 @@ python scripts/mock_agent.py
    - `DATABASE_URL` (la inyecta Railway automáticamente al agregar PostgreSQL)
    - `SECRET_KEY`
    - `DEBUG=False`
-   - `DJANGO_ALLOWED_HOSTS=buho-ob-production.up.railway.app,.railway.app,localhost,127.0.0.1`
-   - `DJANGO_CSRF_TRUSTED_ORIGINS=https://buho-ob-production.up.railway.app`
+   - `DJANGO_ALLOWED_HOSTS=.up.railway.app,localhost,127.0.0.1`
+   - `DJANGO_CSRF_TRUSTED_ORIGINS=https://*.up.railway.app`
+   - `DJANGO_SECURE_PROXY_SSL_HEADER=true`
 5. El comando de arranque queda en `Procfile`:
    ```bash
    web: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
