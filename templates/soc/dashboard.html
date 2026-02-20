@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block breadcrumbs %}<span>Dashboard SOC</span>{% endblock %}
+{% block content %}
+<div class="row g-3 mt-2">
+  <div class="col-md-3"><div class="card p-3"><small>Eventos hoy</small><h3>{{kpis.events_today}}</h3></div></div>
+  <div class="col-md-3"><div class="card p-3"><small>Alertas nuevas</small><h3>{{kpis.new_alerts}}</h3></div></div>
+  <div class="col-md-3"><div class="card p-3"><small>Agentes online</small><h3>{{kpis.agents_online}}</h3></div></div>
+</div>
+<div class="card mt-3 p-3">
+  <h5>Top categorías</h5>
+  <canvas id="catChart"></canvas>
+</div>
+<script>
+const cats = {{ kpis.top_categories|safe }};
+new Chart(document.getElementById('catChart'), {type:'bar',data:{labels:cats.map(c=>c.category),datasets:[{label:'Eventos',data:cats.map(c=>c.total)}]}});
+</script>
+{% endblock %}

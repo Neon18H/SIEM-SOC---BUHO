@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block breadcrumbs %}<span>Threat Hunting</span>{% endblock %}
+{% block content %}
+<form class="row g-2 mt-1">
+  <div class="col"><input class="form-control" name="ip" placeholder="IP"></div>
+  <div class="col"><input class="form-control" name="user" placeholder="Usuario"></div>
+  <div class="col"><input class="form-control" name="host" placeholder="Host"></div>
+  <div class="col"><input class="form-control" name="category" placeholder="Categoría"></div>
+  <div class="col"><input class="form-control" name="text" placeholder="Texto"></div>
+  <div class="col"><button class="btn btn-primary w-100">Buscar</button></div>
+</form>
+<table class="table table-dark table-striped mt-3">
+<thead><tr><th>TS</th><th>Cat</th><th>Sev</th><th>Msg</th><th>IP</th><th>User</th><th>Pivot</th></tr></thead>
+<tbody>
+{% for e in events %}
+<tr>
+<td>{{e.ts}}</td><td>{{e.category}}</td><td>{{e.severity}}</td><td>{{e.message}}</td><td>{{e.ip}}</td><td>{{e.user}}</td>
+<td><a class="badge text-bg-info" href="/hunting/?ip={{e.ip}}">ip</a> <a class="badge text-bg-secondary" href="/hunting/?user={{e.user}}">user</a></td>
+</tr>
+{% endfor %}
+</tbody></table>
+{% endblock %}
