@@ -160,18 +160,26 @@ python scripts/mock_agent.py
    - `DJANGO_SECURE_SSL_REDIRECT=false` (luego se puede cambiar a `true`)
 5. Comandos de deploy en `Procfile`:
    ```bash
-   release: python manage.py migrate && python manage.py collectstatic --noinput
-   web: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+   web: bash scripts/entrypoint.sh
    ```
-6. Si necesitas ejecutarlos manualmente en Railway shell:
+6. Asegúrate de que el entrypoint sea ejecutable:
+   ```bash
+   chmod +x scripts/entrypoint.sh
+   ```
+7. Si necesitas ejecutarlos manualmente en Railway shell:
    ```bash
    python manage.py migrate
    python manage.py collectstatic --noinput
    ```
-7. Confirmar conexión a PostgreSQL revisando logs del deploy y ejecutando:
+8. Confirmar conexión a PostgreSQL revisando logs del deploy y ejecutando:
    ```bash
    python manage.py dbshell
    ```
+
+### Entrypoint Railway
+- El script `scripts/entrypoint.sh` ejecuta `migrate`, `collectstatic` y luego arranca Gunicorn.
+- Detecta automáticamente el módulo WSGI (por ejemplo `config.wsgi` o `buho.wsgi`) a partir de `manage.py` o rutas disponibles.
+- Puedes forzar el módulo con la variable de entorno `DJANGO_WSGI_MODULE` si necesitas sobreescribir la detección automática.
 
 ### Static en Railway
 - WhiteNoise activado (`WhiteNoiseMiddleware` + `CompressedManifestStaticFilesStorage`).
