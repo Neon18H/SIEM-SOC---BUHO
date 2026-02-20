@@ -14,8 +14,19 @@ def get_csv_env(var_name, default=''):
     return [x.strip() for x in os.getenv(var_name, default).split(',') if x.strip()]
 
 
-ALLOWED_HOSTS = get_csv_env('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1')
-CSRF_TRUSTED_ORIGINS = get_csv_env('DJANGO_CSRF_TRUSTED_ORIGINS')
+ALLOWED_HOSTS = get_csv_env(
+    'DJANGO_ALLOWED_HOSTS',
+    '.up.railway.app,localhost,127.0.0.1',
+)
+CSRF_TRUSTED_ORIGINS = get_csv_env(
+    'DJANGO_CSRF_TRUSTED_ORIGINS',
+    'https://*.up.railway.app',
+)
+USE_PROXY_SSL_HEADER = os.getenv('DJANGO_SECURE_PROXY_SSL_HEADER', 'false').lower() == 'true'
+
+if USE_PROXY_SSL_HEADER:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = True
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -85,7 +96,6 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 if not DEBUG:
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
