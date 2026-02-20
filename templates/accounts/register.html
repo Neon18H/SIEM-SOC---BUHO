@@ -1,0 +1,70 @@
+{% extends 'base_auth.html' %}
+{% block title %}Registro | Agente Nocturno{% endblock %}
+{% block content %}
+<div class="auth-card card shadow-lg border-0 mx-auto">
+  <div class="card-body p-4 p-md-5">
+    <div class="text-center mb-4">
+      <div class="icon-badge mb-3"><i class="bi bi-person-plus"></i></div>
+      <h1 class="h3 mb-1">Crear cuenta</h1>
+      <p class="text-secondary mb-0">Activa tu acceso al centro de operaciones</p>
+    </div>
+
+    {% if not signup_allowed %}
+      <div class="alert alert-warning mb-0">Registro deshabilitado. Contacta al administrador.</div>
+    {% else %}
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="form-floating mb-3">
+          <input type="text" class="form-control {% if form.full_name.errors %}is-invalid{% endif %}" id="id_full_name" name="full_name" placeholder="Nombre completo" value="{{ form.full_name.value|default:'' }}" required>
+          <label for="id_full_name">Nombre completo</label>
+          <div class="invalid-feedback">{{ form.full_name.errors|striptags }}</div>
+        </div>
+
+        <div class="form-floating mb-3">
+          <input type="text" class="form-control {% if form.username.errors %}is-invalid{% endif %}" id="id_username" name="username" placeholder="usuario" value="{{ form.username.value|default:'' }}" required>
+          <label for="id_username">Usuario</label>
+          <div class="invalid-feedback">{{ form.username.errors|striptags }}</div>
+        </div>
+
+        <div class="form-floating mb-3">
+          <input type="email" class="form-control {% if form.email.errors %}is-invalid{% endif %}" id="id_email" name="email" placeholder="nombre@empresa.com" value="{{ form.email.value|default:'' }}" required>
+          <label for="id_email">Correo electrónico</label>
+          <div class="invalid-feedback">{{ form.email.errors|striptags }}</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="id_password1">Contraseña</label>
+          <div class="input-group">
+            <input type="password" class="form-control {% if form.password1.errors %}is-invalid{% endif %}" id="id_password1" name="password1" placeholder="••••••••" required data-strength-source>
+            <button class="btn btn-outline-secondary" type="button" data-toggle-password="id_password1"><i class="bi bi-eye"></i></button>
+            <div class="invalid-feedback">{{ form.password1.errors|striptags }}</div>
+          </div>
+          <div class="strength-meter mt-2" aria-hidden="true">
+            <div class="strength-meter-bar" id="strength-bar"></div>
+          </div>
+          <small class="text-secondary" id="strength-text">Seguridad: pendiente</small>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label" for="id_password2">Confirmar contraseña</label>
+          <div class="input-group">
+            <input type="password" class="form-control {% if form.password2.errors %}is-invalid{% endif %}" id="id_password2" name="password2" placeholder="••••••••" required>
+            <button class="btn btn-outline-secondary" type="button" data-toggle-password="id_password2"><i class="bi bi-eye"></i></button>
+            <div class="invalid-feedback">{{ form.password2.errors|striptags }}</div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary w-100 py-2">Crear cuenta</button>
+      </form>
+    {% endif %}
+
+    <p class="text-center mt-4 mb-0 text-secondary">¿Ya tienes cuenta?
+      <a href="/login" class="link-light text-decoration-none fw-semibold">Inicia sesión</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'django_filters',
     'soc',
+    'apps.accounts',
 ]
 
 MIDDLEWARE = [
@@ -84,6 +85,14 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+ALLOW_PUBLIC_SIGNUP = os.getenv('ALLOW_PUBLIC_SIGNUP', 'true').lower() == 'true'
+DEFAULT_SIGNUP_ROLE = os.getenv('DEFAULT_SIGNUP_ROLE', 'viewer').lower()
+
+LOGIN_URL = '/login'
+LOGIN_REDIRECT_URL = '/dashboard/'
+LOGOUT_REDIRECT_URL = '/login'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
