@@ -3,14 +3,17 @@ from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
+import logging
 
 from soc.models import Organization, UserProfile
 
 from .forms import LoginForm, RegisterForm
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 @require_http_methods(['GET'])
@@ -48,26 +51,38 @@ def register_view(request):
         first_name = names[0] if names else ''
         last_name = ' '.join(names[1:]) if len(names) > 1 else ''
 
-        user = User.objects.create_user(
-            username=form.cleaned_data['username'],
-            email=form.cleaned_data['email'],
-            password=form.cleaned_data['password1'],
-            first_name=first_name,
-            last_name=last_name,
-        )
-
-        org = Organization.objects.order_by('id').first()
-        if org is None:
-            org = Organization.objects.create(name='Default Org')
-
         default_role = getattr(settings, 'DEFAULT_SIGNUP_ROLE', UserProfile.ROLE_VIEWER)
         if default_role not in dict(UserProfile.ROLE_CHOICES):
             default_role = UserProfile.ROLE_VIEWER
 
-        UserProfile.objects.create(user=user, organization=org, role=default_role)
+        try:
+            with transaction.atomic():
+                user = User.objects.create_user(
+                    username=form.cleaned_data['username'],
+                    email=form.cleaned_data['email'],
+                    password=form.cleaned_data['password1'],
+                    first_name=first_name,
+                    last_name=last_name,
+                )
+
+                org, _ = Organization.objects.get_or_create(name='Default Org')
+                UserProfile.objects.update_or_create(
+                    user=user,
+                    defaults={'organization': org, 'role': default_role},
+                )
+        except IntegrityError:
+            logger.exception('Error de integridad al registrar usuario')
+            form.add_error(None, 'No se pudo completar el registro. Intenta nuevamente.')
+            return render(
+                request,
+                'accounts/register.html',
+                {'form': form, 'signup_allowed': signup_allowed},
+                status=400,
+            )
+
         login(request, user)
         messages.success(request, 'Cuenta creada correctamente. Bienvenido a Agente Nocturno.')
-        return redirect('dashboard')
+        return redirect('/dashboard')
 
     return render(
         request,
