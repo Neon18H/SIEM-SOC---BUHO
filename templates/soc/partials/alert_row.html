@@ -1,0 +1,13 @@
+<tr id="alert-{{a.id}}">
+  <td>{{a.id}}</td><td>{{a.title}}</td><td><span class="badge text-bg-danger">{{a.severity}}</span></td><td>{{a.status}}</td>
+  <td>
+    <form hx-post="/alerts/{{a.id}}/status/" hx-target="#alert-{{a.id}}" hx-swap="outerHTML">
+      {% csrf_token %}
+      <select class="form-select form-select-sm" name="status" onchange="this.form.submit()">
+        <option value="new" {% if a.status == 'new' %}selected{% endif %}>new</option>
+        <option value="triaged" {% if a.status == 'triaged' %}selected{% endif %}>triaged</option>
+        <option value="closed" {% if a.status == 'closed' %}selected{% endif %}>closed</option>
+      </select>
+    </form>
+  </td>
+</tr>

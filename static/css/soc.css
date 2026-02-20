@@ -1,0 +1,5 @@
+:root { --soc-bg: #0b0f19; --soc-card: #131a2a; --soc-accent: #3c8dff; }
+body { background: var(--soc-bg); color: #dfe7ff; }
+.sidebar { width: 240px; min-height: 100vh; background:#0f1424; }
+.sidebar .nav-link { color: #c9d7ff; }
+.card { background: var(--soc-card); border:1px solid #26314d; }

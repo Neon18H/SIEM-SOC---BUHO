@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block breadcrumbs %}<span>Alertas</span>{% endblock %}
+{% block content %}
+<table class="table table-dark table-hover mt-3"><thead><tr><th>ID</th><th>Título</th><th>Sev</th><th>Estado</th><th>HTMX</th></tr></thead>
+<tbody>
+{% for a in alerts %}
+  {% include 'soc/partials/alert_row.html' %}
+{% endfor %}
+</tbody></table>
+{% endblock %}
