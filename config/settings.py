@@ -14,6 +14,10 @@ def get_csv_env(var_name, default=''):
     return [x.strip() for x in os.getenv(var_name, default).split(',') if x.strip()]
 
 
+def get_bool_env(var_name, default=False):
+    return os.getenv(var_name, str(default)).lower() == 'true'
+
+
 ALLOWED_HOSTS = get_csv_env(
     'DJANGO_ALLOWED_HOSTS',
     '.up.railway.app,localhost,127.0.0.1',
@@ -22,7 +26,7 @@ CSRF_TRUSTED_ORIGINS = get_csv_env(
     'DJANGO_CSRF_TRUSTED_ORIGINS',
     'https://*.up.railway.app',
 )
-USE_PROXY_SSL_HEADER = os.getenv('DJANGO_SECURE_PROXY_SSL_HEADER', 'false').lower() == 'true'
+USE_PROXY_SSL_HEADER = get_bool_env('DJANGO_SECURE_PROXY_SSL_HEADER', True)
 
 if USE_PROXY_SSL_HEADER:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -95,8 +99,9 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
+SECURE_SSL_REDIRECT = get_bool_env('DJANGO_SECURE_SSL_REDIRECT', False)
+
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 

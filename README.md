@@ -157,11 +157,13 @@ python scripts/mock_agent.py
    - `DJANGO_ALLOWED_HOSTS=.up.railway.app,localhost,127.0.0.1`
    - `DJANGO_CSRF_TRUSTED_ORIGINS=https://*.up.railway.app`
    - `DJANGO_SECURE_PROXY_SSL_HEADER=true`
-5. El comando de arranque queda en `Procfile`:
+   - `DJANGO_SECURE_SSL_REDIRECT=false` (luego se puede cambiar a `true`)
+5. Comandos de deploy en `Procfile`:
    ```bash
+   release: python manage.py migrate && python manage.py collectstatic --noinput
    web: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
    ```
-6. Ejecutar una vez en Railway shell:
+6. Si necesitas ejecutarlos manualmente en Railway shell:
    ```bash
    python manage.py migrate
    python manage.py collectstatic --noinput
