@@ -24,8 +24,18 @@
   <main class="flex-grow-1 p-4">
     <div class="d-flex justify-content-between">
       <div>{% block breadcrumbs %}{% endblock %}</div>
-      <a class="btn btn-outline-light btn-sm" href="/accounts/logout/">Salir</a>
+      <form method="post" action="/logout" class="m-0">
+        {% csrf_token %}
+        <button class="btn btn-outline-light btn-sm" type="submit">Salir</button>
+      </form>
     </div>
+    {% if messages %}
+      <div class="my-3">
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
     {% block content %}{% endblock %}
   </main>
 </div>

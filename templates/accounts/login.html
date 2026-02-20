@@ -1,0 +1,40 @@
+{% extends 'base_auth.html' %}
+{% block title %}Login | Agente Nocturno{% endblock %}
+{% block content %}
+<div class="auth-card card shadow-lg border-0 mx-auto">
+  <div class="card-body p-4 p-md-5">
+    <div class="text-center mb-4">
+      <div class="icon-badge mb-3"><i class="bi bi-shield-lock"></i></div>
+      <h1 class="h3 mb-1">Acceso SOC</h1>
+      <p class="text-secondary mb-0">Inicia sesión para entrar a Agente Nocturno</p>
+    </div>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+      {% endif %}
+      <div class="form-floating mb-3">
+        <input type="text" class="form-control {% if form.username.errors %}is-invalid{% endif %}" id="id_username" name="username" placeholder="usuario" value="{{ form.username.value|default:'' }}" required>
+        <label for="id_username">Usuario o email</label>
+        <div class="invalid-feedback">{{ form.username.errors|striptags }}</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="id_password">Contraseña</label>
+        <div class="input-group">
+          <input type="password" class="form-control {% if form.password.errors %}is-invalid{% endif %}" id="id_password" name="password" placeholder="••••••••" required>
+          <button class="btn btn-outline-secondary" type="button" data-toggle-password="id_password"><i class="bi bi-eye"></i></button>
+          <div class="invalid-feedback">{{ form.password.errors|striptags }}</div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary w-100 py-2">Entrar al SOC</button>
+    </form>
+
+    <p class="text-center mt-4 mb-0 text-secondary">¿No tienes cuenta?
+      <a href="/register" class="link-light text-decoration-none fw-semibold">Regístrate</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

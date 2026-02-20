@@ -1,4 +1,3 @@
-from django.contrib.auth import views as auth_views
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
@@ -26,10 +25,7 @@ router.register('alerts', AlertViewSet, basename='alerts')
 router.register('cases', CaseViewSet, basename='cases')
 
 urlpatterns = [
-    path('accounts/login/', auth_views.LoginView.as_view(), name='login'),
-    path('accounts/logout/', auth_views.LogoutView.as_view(), name='logout'),
-
-    path('', dashboard_view, name='dashboard'),
+    path('dashboard/', dashboard_view, name='dashboard'),
     path('hunting/', hunting_view, name='hunting'),
     path('alerts/', alerts_view, name='alerts'),
     path('cases/', cases_view, name='cases'),
