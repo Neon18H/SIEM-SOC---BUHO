@@ -1,0 +1,9 @@
+.uba-panel { background: #11141c; border-radius: 12px; padding: 16px; }
+.uba-card { background: #1b1f2a; border: 1px solid #2a3140; border-radius: 12px; }
+.uba-kpi-label { font-size: .75rem; text-transform: uppercase; color: #98a1b3; }
+.uba-kpi { font-size: 1.4rem; font-weight: 700; }
+.uba-feed { max-height: 420px; overflow-y: auto; }
+.uba-offense-item { border-bottom: 1px solid #2a3140; padding: .55rem 0; }
+.uba-offense-item:last-child { border-bottom: 0; }
+.uba-spark { height: 6px; background: #2a3140; border-radius: 999px; overflow: hidden; min-width: 70px; }
+.uba-spark > span { display: block; height: 100%; background: linear-gradient(90deg, #0dcaf0, #ffc107); }
