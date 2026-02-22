@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Agent, Alert, EndpointRisk, Organization, UserProfile
+from .models import Agent, Alert, EndpointRisk, LogEvent, Organization, UserProfile
 
 
 class BasicModelTests(TestCase):
@@ -150,3 +150,52 @@ class EnrollmentAndIngestOrgEnforcementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         event = agent.logevent_set.latest('id')
         self.assertEqual(event.organization, self.org1)
+
+
+class UBAApiTests(TestCase):
+    def setUp(self):
+        self.org1 = Organization.objects.create(name='UBA Org 1')
+        self.org2 = Organization.objects.create(name='UBA Org 2')
+        self.user = User.objects.create_user('uba-user', password='x12345')
+        profile = self.user.userprofile
+        profile.organization = self.org1
+        profile.save(update_fields=['organization'])
+
+        self.agent_org1 = Agent.objects.create(organization=self.org1, hostname='uba-a1', os='linux', ip='10.10.1.1', status='online', agent_key_hash='x')
+        self.agent_org2 = Agent.objects.create(organization=self.org2, hostname='uba-a2', os='linux', ip='10.20.1.1', status='online', agent_key_hash='y')
+
+        event = LogEvent.objects.create(
+            organization=self.org1,
+            agent=self.agent_org1,
+            ts=timezone.now(),
+            source='agent',
+            severity=7,
+            category='auth',
+            message='failed login for admin',
+            user='admin',
+            raw_json={},
+            parsed_json={},
+        )
+        Alert.objects.create(organization=self.org1, event=event, severity='High', title='Auth offense')
+
+    def test_uba_endpoint_outside_org_returns_404(self):
+        self.client.login(username='uba-user', password='x12345')
+        response = self.client.get(reverse('api_uba_summary', kwargs={'agent_id': self.agent_org2.id}))
+        self.assertEqual(response.status_code, 404)
+
+    def test_uba_summary_json_shape(self):
+        self.client.login(username='uba-user', password='x12345')
+        response = self.client.get(reverse('api_uba_summary', kwargs={'agent_id': self.agent_org1.id}), {'range': '24h'})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        expected_keys = {
+            'agent_id',
+            'endpoint',
+            'window',
+            'total_events',
+            'monitored_users',
+            'offenses',
+            'avg_severity',
+            'system_risk_score',
+        }
+        self.assertTrue(expected_keys.issubset(payload.keys()))

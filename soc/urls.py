@@ -19,6 +19,14 @@ from .views import (
     metrics_view,
     threatintel_import_view,
 )
+from .views_uba import uba_endpoint_default_view, uba_endpoint_view
+from .api_uba import (
+    uba_offenses_api,
+    uba_risk_breakdown_api,
+    uba_score_series_api,
+    uba_summary_api,
+    uba_users_api,
+)
 
 router = DefaultRouter()
 router.register('events', EventViewSet, basename='events')
@@ -33,6 +41,8 @@ urlpatterns = [
     path('endpoints/<int:endpoint_id>/', endpoint_detail_view, name='endpoint_detail'),
     path('alerts/', alerts_view, name='alerts'),
     path('cases/', cases_view, name='cases'),
+    path('uba/endpoint/', uba_endpoint_default_view, name='uba_endpoint_default'),
+    path('uba/endpoint/<int:agent_id>/', uba_endpoint_view, name='uba_endpoint'),
     path('ir/actions/create/', create_ir_action, name='ir_action_create'),
     path('alerts/<int:alert_id>/status/', alert_status_htmx, name='alert_status_htmx'),
 
@@ -40,5 +50,10 @@ urlpatterns = [
     path('api/ingest/', IngestView.as_view(), name='api_ingest'),
     path('api/metrics/', metrics_view, name='api_metrics'),
     path('api/threatintel/import/', threatintel_import_view, name='api_ti_import'),
+    path('api/uba/<int:agent_id>/summary/', uba_summary_api, name='api_uba_summary'),
+    path('api/uba/<int:agent_id>/users/', uba_users_api, name='api_uba_users'),
+    path('api/uba/<int:agent_id>/offenses/', uba_offenses_api, name='api_uba_offenses'),
+    path('api/uba/<int:agent_id>/score-series/', uba_score_series_api, name='api_uba_score_series'),
+    path('api/uba/<int:agent_id>/risk-breakdown/', uba_risk_breakdown_api, name='api_uba_risk_breakdown'),
     path('api/', include(router.urls)),
 ]

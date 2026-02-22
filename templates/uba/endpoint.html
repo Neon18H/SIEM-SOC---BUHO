@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block breadcrumbs %}
+<div>
+  <h3 class="mb-0">User Behavior Analytics (UBA) · Endpoint</h3>
+  <small class="text-secondary">Vista SOC por endpoint con riesgo de usuarios y ofensas recientes</small>
+</div>
+{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/uba.css' %}">
+
+<div class="uba-panel" data-uba-app data-initial-agent="{% if selected_agent %}{{ selected_agent.id }}{% endif %}" data-initial-range="{{ range }}">
+  <div class="d-flex flex-wrap gap-2 mb-4 align-items-center">
+    <label class="text-secondary small">Endpoint</label>
+    <select class="form-select form-select-sm w-auto" data-uba-agent>
+      {% for agent in agents %}
+      <option value="{{ agent.id }}" {% if selected_agent and selected_agent.id == agent.id %}selected{% endif %}>{{ agent.hostname }} · {{ agent.ip }}</option>
+      {% endfor %}
+    </select>
+    <label class="text-secondary small ms-2">Rango</label>
+    <select class="form-select form-select-sm w-auto" data-uba-range>
+      <option value="1h" {% if range == '1h' %}selected{% endif %}>1h</option>
+      <option value="24h" {% if range == '24h' %}selected{% endif %}>24h</option>
+      <option value="7d" {% if range == '7d' %}selected{% endif %}>7d</option>
+    </select>
+  </div>
+
+  {% if not selected_agent %}
+  <div class="alert alert-secondary">No hay endpoints disponibles para tu organización.</div>
+  {% else %}
+  <div class="row g-3 mb-3" id="uba-kpis">
+    <div class="col-6 col-xl"><div class="card uba-card p-3"><div class="uba-kpi-label">Total events</div><div class="uba-kpi" data-kpi="total_events">--</div></div></div>
+    <div class="col-6 col-xl"><div class="card uba-card p-3"><div class="uba-kpi-label">Monitored users</div><div class="uba-kpi" data-kpi="monitored_users">--</div></div></div>
+    <div class="col-6 col-xl"><div class="card uba-card p-3"><div class="uba-kpi-label">Offenses</div><div class="uba-kpi" data-kpi="offenses">--</div></div></div>
+    <div class="col-6 col-xl"><div class="card uba-card p-3"><div class="uba-kpi-label">Avg severity</div><div class="uba-kpi" data-kpi="avg_severity">--</div></div></div>
+    <div class="col-12 col-xl"><div class="card uba-card p-3"><div class="uba-kpi-label">System risk score</div><div class="uba-kpi text-warning" data-kpi="system_risk_score">--</div></div></div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-5">
+      <div class="card uba-card p-3 h-100">
+        <h6>Monitored users</h6>
+        <div class="table-responsive">
+          <table class="table table-dark table-sm align-middle mb-0">
+            <thead><tr><th>User</th><th>Events</th><th>Risk</th><th>Trend</th></tr></thead>
+            <tbody data-users-table><tr><td colspan="4" class="text-secondary">Cargando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card uba-card p-3 h-100">
+        <h6>Recent offenses</h6>
+        <div data-offense-feed class="uba-feed"><div class="text-secondary">Cargando...</div></div>
+      </div>
+    </div>
+    <div class="col-lg-3 d-flex flex-column gap-3">
+      <div class="card uba-card p-3">
+        <h6>System score</h6>
+        <canvas id="ubaScoreChart" height="180"></canvas>
+      </div>
+      <div class="card uba-card p-3">
+        <h6>Risk breakdown</h6>
+        <canvas id="ubaBreakdownChart" height="180"></canvas>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script src="{% static 'js/uba.js' %}"></script>
+{% endblock %}
