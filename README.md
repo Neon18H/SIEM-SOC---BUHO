@@ -217,3 +217,41 @@ python scripts/mock_agent.py
 - La descarga rápida crea un `EnrollmentToken` de 24 horas para la organización del usuario.
 - Cada descarga genera auditoría en `DownloadAudit` con usuario, organización, IP, user agent y tipo (`installer`/`bundle`).
 - Las vistas de descarga requieren login y aplican rate-limit básico por usuario/plataforma.
+
+## Centro de Descargas funcional (Wazuh-like)
+
+### Publicar releases (admin)
+1. Entrar a `GET /agents/releases/`.
+2. Cargar release por plataforma (`linux` o `windows`) con versión y archivo (`.tar.gz` Linux / `.zip` Windows).
+3. El archivo se guarda en `MEDIA_ROOT/agents/` automáticamente.
+4. El SHA256 se calcula automáticamente al guardar.
+5. Activar release. El sistema garantiza solo 1 activo por plataforma.
+
+### Seed rápido para evitar "No hay release publicado aún"
+- Desde la UI: crea uno en `/agents/releases/` y marca activo.
+- O por shell Django:
+```bash
+python manage.py shell -c "from apps.agent_downloads.models import AgentRelease; from django.core.files.base import ContentFile; r=AgentRelease(platform='linux',version='0.1.0',is_active=True); r.file.save('agent-linux.tar.gz',ContentFile(b'demo')); r.save(); print(r.id,r.sha256)"
+```
+
+### Descargas
+- Instalador activo: `GET /agents/downloads/installer/<platform>`
+- Bundle preconfigurado: `GET /agents/downloads/bundle/<platform>`
+  - Linux: `tar.gz`
+  - Windows: `zip`
+  - Incluye `config.yml`, `install.sh/install.ps1`, `README-quickstart.txt`, y código del `agent_mvp/`.
+  - Genera `EnrollmentToken` 24h por organización del usuario.
+  - Registra auditoría en `DownloadAudit`.
+
+### Agente MVP empaquetable
+Carpeta: `agent_mvp/`
+- `main.py`: loop de telemetría cada N segundos
+- `collectors.py`: system info, auth logs Linux incremental, base Windows eventlog, docker, cloud metadata
+- `enroll.py`: `POST /api/agents/enroll/` y guarda `agent_key`
+- `sender.py`: `POST /api/ingest/` con `X-AGENT-KEY` + backoff exponencial
+- `cursor_store.py`: cursores JSON
+
+### Instalación Linux/Windows
+- Linux: ejecuta `install.sh` como root; instala venv en `/opt/agent-nocturno/`, config en `/etc/agent-nocturno/`, y `systemd` service `agent-nocturno`.
+- Windows: ejecuta `install.ps1` admin; instala en `C:\ProgramData\AgentNocturno`, crea servicio con NSSM y valida con `Get-Service`.
+

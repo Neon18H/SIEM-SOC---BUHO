@@ -1,0 +1,5 @@
+soc_url: https://soc.local
+enrollment_token: REEMPLAZAR
+interval: 60
+collectors:
+  - system_info
