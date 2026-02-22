@@ -6,7 +6,7 @@ from django.core.files.base import ContentFile
 from django.test import TestCase
 from django.urls import reverse
 
-from soc.models import Organization, UserProfile
+from soc.models import EnrollmentToken, Organization, UserProfile
 
 from .models import AgentRelease
 
@@ -53,3 +53,13 @@ class AgentDownloadsTests(TestCase):
         self.client.login(username='viewer', password='secret123')
         response = self.client.get(reverse('agent_downloads:releases_admin'))
         self.assertEqual(response.status_code, 403)
+
+
+    def test_bundle_uses_user_org_for_token(self):
+        self.client.login(username='analyst', password='secret123')
+        response = self.client.get(reverse('agent_downloads:download_bundle', args=['windows']))
+        self.assertEqual(response.status_code, 200)
+
+        token = EnrollmentToken.objects.latest('id')
+        self.assertEqual(token.organization, self.org)
+        self.assertEqual(token.created_by, self.user)

@@ -93,3 +93,60 @@ class EndpointsListAuthTests(TestCase):
         content = response.content.decode()
         self.assertIn('a1', content)
         self.assertNotIn('a2', content)
+
+
+class EnrollmentAndIngestOrgEnforcementTests(TestCase):
+    def setUp(self):
+        self.org1 = Organization.objects.create(name='Tenant One')
+        self.org2 = Organization.objects.create(name='Tenant Two')
+
+    def test_enroll_assigns_org_from_token(self):
+        from .models import EnrollmentToken
+        token = EnrollmentToken.generate(org=self.org1, created_by=None, hours=1)
+
+        response = self.client.post(
+            reverse('api_enroll'),
+            data={
+                'token': token.token,
+                'hostname': 'h1',
+                'os': 'linux',
+                'ip': '10.10.10.10',
+            },
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        agent_id = response.json()['agent_id']
+        agent = Agent.objects.get(id=agent_id)
+        self.assertEqual(agent.organization, self.org1)
+
+    def test_ingest_forces_agent_org(self):
+        agent = Agent.objects.create(
+            organization=self.org1,
+            hostname='h2',
+            os='linux',
+            ip='10.0.0.5',
+            status='online',
+            agent_key_hash='',
+        )
+        agent.set_agent_key('forced-org-key')
+        agent.save(update_fields=['agent_key_hash'])
+
+        payload = {
+            'ts': timezone.now().isoformat(),
+            'source': 'agent',
+            'severity': 4,
+            'category': 'telemetry',
+            'message': 'tenant check',
+            'host': 'h2',
+            'ip': '10.0.0.5',
+            'raw': {'organization': self.org2.id},
+        }
+        response = self.client.post(
+            reverse('api_ingest'),
+            data=payload,
+            content_type='application/json',
+            **{'HTTP_X_AGENT_KEY': 'forced-org-key'},
+        )
+        self.assertEqual(response.status_code, 200)
+        event = agent.logevent_set.latest('id')
+        self.assertEqual(event.organization, self.org1)

@@ -61,7 +61,17 @@ INSTALL_DIR="/opt/agent-nocturno"
 CONF_DIR="/etc/agent-nocturno"
 SECRET_FILE="${CONF_DIR}/agent-secret.json"
 
-sudo useradd --system --home /nonexistent --shell /usr/sbin/nologin agentnocturno 2>/dev/null || true
+if [ "${EUID}" -ne 0 ]; then
+  echo "Este instalador requiere sudo/root"
+  exit 1
+fi
+
+useradd --system --home /nonexistent --shell /usr/sbin/nologin agentnocturno 2>/dev/null || true
+mkdir -p /var/log/agent-nocturno
+touch /var/log/agent-nocturno/agent.log
+chown agentnocturno:agentnocturno /var/log/agent-nocturno/agent.log || true
+chmod 640 /var/log/agent-nocturno/agent.log || true
+
 sudo mkdir -p "${INSTALL_DIR}" "${CONF_DIR}"
 sudo cp "${BASE_DIR}/config.yml" "${CONF_DIR}/config.yml"
 
@@ -87,6 +97,8 @@ WorkingDirectory=/opt/agent-nocturno
 ExecStart=/opt/agent-nocturno/venv/bin/python /opt/agent-nocturno/main.py --config /etc/agent-nocturno/config.yml
 Restart=always
 RestartSec=5
+StandardOutput=append:/var/log/agent-nocturno/agent.log
+StandardError=append:/var/log/agent-nocturno/agent.log
 
 [Install]
 WantedBy=multi-user.target
@@ -103,13 +115,31 @@ sudo systemctl --no-pager --full status agent-nocturno
 
 def _windows_install_script():
     return r"""$ErrorActionPreference = 'Stop'
+
+function Finish-WithMessage($message) {
+  Write-Host "`n$message"
+  Read-Host 'Presiona ENTER para cerrar'
+}
+
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+  Finish-WithMessage 'Ejecuta este script como Administrador.'
+  exit 1
+}
+
 $BaseDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $InstallDir = 'C:\ProgramData\AgentNocturno'
 $AgentDir = Join-Path $InstallDir 'agent'
 $ConfigFile = Join-Path $InstallDir 'config.yml'
+$InstallLog = Join-Path $InstallDir 'install.log'
+$AgentLog = Join-Path $InstallDir 'agent.log'
+
+Start-Transcript -Path $InstallLog -Append
+
+try {
 
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 New-Item -ItemType Directory -Path $AgentDir -Force | Out-Null
+New-Item -ItemType File -Path $AgentLog -Force | Out-Null
 Copy-Item (Join-Path $BaseDir 'config.yml') $ConfigFile -Force
 if (Test-Path (Join-Path $BaseDir 'secret.json')) {
   Copy-Item (Join-Path $BaseDir 'secret.json') (Join-Path $InstallDir 'secret.json') -Force
@@ -129,8 +159,21 @@ $pythonExe = Join-Path $InstallDir 'venv\Scripts\python.exe'
 $appArgs = "`"$AgentDir\main.py`" --config `"$ConfigFile`""
 & $nssm install agent-nocturno $pythonExe $appArgs
 & $nssm set agent-nocturno AppDirectory $AgentDir
+& $nssm set agent-nocturno AppStdout $AgentLog
+& $nssm set agent-nocturno AppStderr $AgentLog
+& $nssm set agent-nocturno Start SERVICE_AUTO_START
 & $nssm start agent-nocturno
 Get-Service agent-nocturno
+Finish-WithMessage 'Instalación completada. Servicio agent-nocturno iniciado.'
+}
+catch {
+  Write-Host "Error durante instalación: $($_.Exception.Message)"
+  Finish-WithMessage 'Instalación fallida. Revisa install.log para detalles.'
+  exit 1
+}
+finally {
+  Stop-Transcript | Out-Null
+}
 """
 
 
@@ -151,7 +194,7 @@ def _config_payload(request, enrollment):
     return (
         f'soc_url: {soc_url}\n'
         f'enrollment_token: {enrollment.token}\n'
-        'interval: 60\n'
+        'interval: 10\n'
         'collectors:\n'
         '  - system_info\n'
         '  - auth_logs\n'
@@ -172,6 +215,32 @@ def _agent_source_files():
         file_path = base / rel
         if file_path.exists():
             output.append((f'agent/{rel}', file_path.read_bytes()))
+    return output
+
+def _extract_release_payload(release, platform):
+    if not release or not release.file:
+        return []
+
+    release.file.open('rb')
+    payload = release.file.read()
+    release.file.close()
+
+    output = []
+    if platform == AgentRelease.PLATFORM_WINDOWS:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                output.append((f'payload/{info.filename}', archive.read(info.filename)))
+        return output
+
+    with tarfile.open(fileobj=io.BytesIO(payload), mode='r:gz') as archive:
+        for member in archive.getmembers():
+            if member.isdir():
+                continue
+            extracted = archive.extractfile(member)
+            if extracted:
+                output.append((f'payload/{member.name}', extracted.read()))
     return output
 
 
@@ -239,6 +308,9 @@ def download_bundle(request, platform):
     files[installer_name] = (_linux_install_script() if platform == AgentRelease.PLATFORM_LINUX else _windows_install_script()).encode()
 
     for rel, content in _agent_source_files():
+        files[rel] = content
+
+    for rel, content in _extract_release_payload(release, platform):
         files[rel] = content
 
     DownloadAudit.objects.create(
