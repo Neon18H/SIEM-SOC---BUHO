@@ -227,21 +227,30 @@ python scripts/mock_agent.py
 4. El SHA256 se calcula automáticamente al guardar.
 5. Activar release. El sistema garantiza solo 1 activo por plataforma.
 
-### Seed rápido para evitar "No hay release publicado aún"
-- Desde la UI: crea uno en `/agents/releases/` y marca activo.
-- O por shell Django:
+### Seed rápido para publicar releases por defecto
 ```bash
-python manage.py shell -c "from apps.agent_downloads.models import AgentRelease; from django.core.files.base import ContentFile; r=AgentRelease(platform='linux',version='0.1.0',is_active=True); r.file.save('agent-linux.tar.gz',ContentFile(b'demo')); r.save(); print(r.id,r.sha256)"
+python manage.py publish_default_releases
 ```
+Busca archivos existentes (`examples/releases/*` o `agent_releases/*`). Si no existen, empaqueta automáticamente `examples/release_example/linux` y `examples/release_example/windows` y publica un release activo por plataforma.
 
 ### Descargas
 - Instalador activo: `GET /agents/downloads/installer/<platform>`
 - Bundle preconfigurado: `GET /agents/downloads/bundle/<platform>`
-  - Linux: `tar.gz`
-  - Windows: `zip`
-  - Incluye `config.yml`, `install.sh/install.ps1`, `README-quickstart.txt`, y código del `agent_mvp/`.
-  - Genera `EnrollmentToken` 24h por organización del usuario.
+  - Crea `EnrollmentToken` de 24h para la organización del usuario autenticado.
   - Registra auditoría en `DownloadAudit`.
+  - Estructura del bundle Linux (`.tar.gz`):
+    - `config.yml`
+    - `install.sh`
+    - `README-quickstart.txt`
+    - `agent/main.py`, `agent/enroll.py`, `agent/sender.py`, `agent/collectors.py`, `agent/cursor_store.py`, `agent/requirements.txt`
+    - `payload/*` (contenido del release activo, si existe)
+  - Estructura del bundle Windows (`.zip`):
+    - `config.yml`
+    - `install.ps1`
+    - `README-quickstart.txt`
+    - `agent/*` (MVP Python)
+    - `agent/nssm.exe`
+    - `payload/*` (contenido del release activo, si existe)
 
 ### Agente MVP empaquetable
 Carpeta: `agent_mvp/`
