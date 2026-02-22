@@ -255,3 +255,43 @@ Carpeta: `agent_mvp/`
 - Linux: ejecuta `install.sh` como root; instala venv en `/opt/agent-nocturno/`, config en `/etc/agent-nocturno/`, y `systemd` service `agent-nocturno`.
 - Windows: ejecuta `install.ps1` admin; instala en `C:\ProgramData\AgentNocturno`, crea servicio con NSSM y valida con `Get-Service`.
 
+
+---
+
+## EDR-lite por Endpoint (Agente Nocturno)
+
+### UI
+- `GET /endpoints/`: tabla por endpoint con hostname, OS, IP, estado, `last_seen`, risk score y alertas 24h.
+- `GET /endpoints/<id>/`: detalle con overview + tabs (Telemetry, Users, Command Line, Services, Files, Alerts) y gráfica 24h CPU/RAM con Chart.js.
+
+### Contrato de ingesta `/api/ingest/`
+Cada evento del agente debe incluir:
+- `ts` (ISO8601)
+- `category`
+- `host`
+- `user` (si aplica)
+- `ip` (si aplica)
+- `raw` (JSON completo del evento)
+
+Campos recomendados adicionales:
+- `source` (default `agent`)
+- `severity` (0-10, default 3)
+- `message` (texto libre)
+
+Categorías soportadas:
+- `telemetry`: `cpu`, `ram`, `disk`, `net`, `gpu`
+- `process`: lista top N de procesos
+- `user_activity`: `login/logout/new_user/admin_added/failed_login/...`
+- `commandline`: `cmd`, `user`, `parent`, `pid`
+- `service`: `service_name`, `action=start|stop|install`
+- `file_activity`: `action=download|execute`, `path`, `sha256` opcional
+- `network`: `dst_ip`, `dst_port`, `domain` opcional
+- `detection`: detección local opcional emitida por agente
+
+### Detecciones server-side (MVP)
+- `brute_force`: múltiples `failed_login` en ventana corta.
+- `suspicious_execution`: ejecución en carpeta temporal + CPU alta + salida de red.
+- `new_admin_user`: alta de usuario con privilegios administrativos.
+- `suspicious_powershell`: `EncodedCommand` o shell sospechoso.
+
+Cada detección puede generar alerta con mapeo MITRE (`mitre_tactic`, `mitre_technique_id`) y actualizar `EndpointRisk`.

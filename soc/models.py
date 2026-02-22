@@ -35,6 +35,10 @@ class Agent(models.Model):
     ip = models.GenericIPAddressField()
     status = models.CharField(max_length=20, default=STATUS_OFFLINE)
     last_seen = models.DateTimeField(null=True, blank=True)
+    current_cpu = models.FloatField(null=True, blank=True)
+    current_ram = models.FloatField(null=True, blank=True)
+    current_disk = models.FloatField(null=True, blank=True)
+    current_gpu = models.FloatField(null=True, blank=True)
     agent_key_hash = models.CharField(max_length=128)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -113,7 +117,17 @@ class Alert(models.Model):
     assignee = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     title = models.CharField(max_length=200, default='Generated Alert')
     details = models.TextField(blank=True)
+    mitre_tactic = models.CharField(max_length=120, blank=True)
+    mitre_technique_id = models.CharField(max_length=30, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class EndpointRisk(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    agent = models.OneToOneField(Agent, on_delete=models.CASCADE, related_name='endpoint_risk')
+    score = models.PositiveSmallIntegerField(default=0)
+    reasons = models.JSONField(default=list)
     updated_at = models.DateTimeField(auto_now=True)
 
 

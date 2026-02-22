@@ -12,10 +12,10 @@ class EnrollmentSerializer(serializers.Serializer):
 
 class IngestSerializer(serializers.Serializer):
     ts = serializers.DateTimeField()
-    source = serializers.CharField()
-    severity = serializers.IntegerField(min_value=0, max_value=10)
+    source = serializers.CharField(required=False, default='agent')
+    severity = serializers.IntegerField(min_value=0, max_value=10, required=False, default=3)
     category = serializers.CharField()
-    message = serializers.CharField()
+    message = serializers.CharField(required=False, allow_blank=True, default='')
     user = serializers.CharField(required=False, allow_blank=True)
     ip = serializers.IPAddressField(required=False)
     host = serializers.CharField(required=False, allow_blank=True)

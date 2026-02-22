@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block content %}
+<h3>Endpoint {{ agent.hostname }}</h3>
+<div class="row g-3 mb-3">
+  <div class="col-md-2"><div class="card p-2">Status: {{ agent.status }}</div></div>
+  <div class="col-md-2"><div class="card p-2">Risk: {{ risk.score|default:0 }}</div></div>
+  <div class="col-md-2"><div class="card p-2">CPU: {{ agent.current_cpu|default:'-' }}%</div></div>
+  <div class="col-md-2"><div class="card p-2">RAM: {{ agent.current_ram|default:'-' }}%</div></div>
+  <div class="col-md-2"><div class="card p-2">Disk: {{ agent.current_disk|default:'-' }}%</div></div>
+  <div class="col-md-2"><div class="card p-2">GPU: {{ agent.current_gpu|default:'-' }}%</div></div>
+</div>
+<div class="card mb-3"><div class="card-body"><canvas id="telemetryChart" height="90"></canvas></div></div>
+<ul class="nav nav-tabs" id="endpointTabs" role="tablist">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#telemetry">Telemetry</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#users">Users</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cmd">Command Line</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#services">Services</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#files">Files</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#alerts">Alerts</button></li>
+</ul>
+<div class="tab-content border border-top-0 p-3">
+  <div class="tab-pane fade show active" id="telemetry">{% for e in telemetry_events %}<div>{{ e.ts }} - {{ e.raw_json }}</div>{% empty %}Sin datos{% endfor %}</div>
+  <div class="tab-pane fade" id="users">{% for e in user_events %}<div>{{ e.ts }} - {{ e.raw_json }}</div>{% empty %}Sin datos{% endfor %}</div>
+  <div class="tab-pane fade" id="cmd">{% for e in command_events %}<div>{{ e.ts }} - {{ e.raw_json }}</div>{% empty %}Sin datos{% endfor %}</div>
+  <div class="tab-pane fade" id="services">{% for e in service_events %}<div>{{ e.ts }} - {{ e.raw_json }}</div>{% empty %}Sin datos{% endfor %}</div>
+  <div class="tab-pane fade" id="files">{% for e in file_events %}<div>{{ e.ts }} - {{ e.raw_json }}</div>{% empty %}Sin datos{% endfor %}</div>
+  <div class="tab-pane fade" id="alerts">{% for a in alerts %}<div>{{ a.created_at }} - {{ a.title }} ({{ a.severity }}) {{ a.mitre_tactic }} {{ a.mitre_technique_id }}</div>{% empty %}Sin alertas{% endfor %}</div>
+</div>
+<script>
+new Chart(document.getElementById('telemetryChart'), {
+  type: 'line',
+  data: {
+    labels: {{ chart_labels|safe }},
+    datasets: [
+      {label: 'CPU', data: {{ chart_cpu|safe }}, borderColor: '#36a2eb'},
+      {label: 'RAM', data: {{ chart_ram|safe }}, borderColor: '#ff6384'}
+    ]
+  }
+});
+</script>
+{% endblock %}
