@@ -11,6 +11,7 @@ from django.http import FileResponse, HttpResponse, HttpResponseForbidden, HttpR
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
+from django.utils import timezone
 
 from soc.auth import user_org
 from soc.models import EnrollmentToken
@@ -217,6 +218,164 @@ def _agent_source_files():
             output.append((f'agent/{rel}', file_path.read_bytes()))
     return output
 
+
+def _validate_enrollment_token(raw_token):
+    token = EnrollmentToken.objects.filter(token=raw_token).select_related('organization').first()
+    if not token:
+        return None, HttpResponse('Token inválido.', status=404)
+    if token.expires_at < timezone.now():
+        return None, HttpResponse('Token expirado.', status=403)
+    return token, None
+
+
+def _base_install_agent_files(platform):
+    files = {}
+    for rel, content in _agent_source_files():
+        files[rel] = content
+
+    if platform == AgentRelease.PLATFORM_WINDOWS and 'agent/nssm.exe' in files:
+        files['nssm.exe'] = files['agent/nssm.exe']
+
+    files['config-template.yml'] = (
+        'soc_url: https://your-siem.local\n'
+        'enrollment_token: CHANGE_ME\n'
+        'interval: 10\n'
+        'verify_tls: true\n'
+    ).encode()
+    return files
+
+
+def _build_windows_installer_script(request, token):
+    soc_url = request.build_absolute_uri('/')[:-1]
+    return fr"""$ErrorActionPreference = 'Stop'
+
+function Finish-WithMessage($message) {{
+  Write-Host "`n$message"
+  Read-Host 'Presiona ENTER para cerrar'
+}}
+
+function Write-Log($path, $message) {{
+  $line = "$(Get-Date -Format o) $message"
+  Add-Content -Path $path -Value $line
+  Write-Host $line
+}}
+
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {{
+  Finish-WithMessage 'Ejecuta este comando como Administrador.'
+  exit 1
+}}
+
+$SocUrl = '{soc_url}'
+$Token = '{token}'
+$InstallDir = 'C:\ProgramData\AgentNocturno'
+$InstallLog = Join-Path $InstallDir 'install.log'
+$AgentLog = Join-Path $InstallDir 'agent.log'
+$ZipPath = Join-Path $env:TEMP 'agent-nocturno-windows.zip'
+
+New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+New-Item -ItemType File -Path $InstallLog -Force | Out-Null
+New-Item -ItemType File -Path $AgentLog -Force | Out-Null
+
+try {{
+  Write-Log $InstallLog 'Descargando payload windows.zip desde SIEM...'
+  Invoke-WebRequest -Uri "$SocUrl/install/agent/windows.zip" -OutFile $ZipPath -UseBasicParsing
+  Write-Log $InstallLog 'Extrayendo payload...'
+  Expand-Archive -LiteralPath $ZipPath -DestinationPath $InstallDir -Force
+
+  $ConfigPath = Join-Path $InstallDir 'config.yml'
+  @"
+soc_url: $SocUrl
+enrollment_token: $Token
+interval: 10
+verify_tls: true
+"@ | Set-Content -Path $ConfigPath -Encoding UTF8
+
+  py -3 -m venv (Join-Path $InstallDir 'venv')
+  & (Join-Path $InstallDir 'venv\Scripts\pip.exe') install --upgrade pip
+  & (Join-Path $InstallDir 'venv\Scripts\pip.exe') install -r (Join-Path $InstallDir 'agent\requirements.txt')
+
+  $nssm = Join-Path $InstallDir 'nssm.exe'
+  if (!(Test-Path $nssm)) {{ throw 'nssm.exe no encontrado en el payload.' }}
+
+  $pythonExe = Join-Path $InstallDir 'venv\Scripts\python.exe'
+  $appArgs = "`"$InstallDir\agent\main.py`" --config `"$ConfigPath`""
+  & $nssm install agent-nocturno $pythonExe $appArgs
+  & $nssm set agent-nocturno AppDirectory (Join-Path $InstallDir 'agent')
+  & $nssm set agent-nocturno AppStdout $AgentLog
+  & $nssm set agent-nocturno AppStderr $AgentLog
+  & $nssm set agent-nocturno Start SERVICE_AUTO_START
+  & $nssm start agent-nocturno
+  Write-Log $InstallLog 'Servicio agent-nocturno iniciado.'
+  Get-Service agent-nocturno | Format-Table -AutoSize
+  Finish-WithMessage 'Instalación finalizada correctamente.'
+}}
+catch {{
+  Write-Log $InstallLog "ERROR: $($_.Exception.Message)"
+  Finish-WithMessage 'Instalación fallida. Revisa C:\ProgramData\AgentNocturno\install.log'
+  exit 1
+}}
+"""
+
+
+def _build_linux_installer_script(request, token):
+    soc_url = request.build_absolute_uri('/')[:-1]
+    return f"""#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$EUID" -ne 0 ]; then
+  echo "Este instalador requiere sudo/root"
+  exit 1
+fi
+
+SOC_URL="{soc_url}"
+TOKEN="{token}"
+INSTALL_DIR="/opt/agent-nocturno"
+CONF_DIR="/etc/agent-nocturno"
+LOG_DIR="/var/log/agent-nocturno"
+ARCHIVE="/tmp/agent-nocturno-linux.tar.gz"
+
+mkdir -p "$INSTALL_DIR" "$CONF_DIR" "$LOG_DIR"
+touch "$LOG_DIR/agent.log"
+
+curl -fsSL "$SOC_URL/install/agent/linux.tar.gz" -o "$ARCHIVE"
+tar -xzf "$ARCHIVE" -C "$INSTALL_DIR"
+
+cat > "$CONF_DIR/config.yml" <<EOF
+soc_url: $SOC_URL
+enrollment_token: $TOKEN
+interval: 10
+verify_tls: true
+EOF
+
+python3 -m venv "$INSTALL_DIR/venv"
+"$INSTALL_DIR/venv/bin/pip" install --upgrade pip
+"$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/agent/requirements.txt"
+
+cat > /etc/systemd/system/agent-nocturno.service <<'UNIT'
+[Unit]
+Description=Agent Nocturno
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/agent-nocturno/agent
+ExecStart=/opt/agent-nocturno/venv/bin/python /opt/agent-nocturno/agent/main.py --config /etc/agent-nocturno/config.yml
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/agent-nocturno/agent.log
+StandardError=append:/var/log/agent-nocturno/agent.log
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now agent-nocturno
+systemctl --no-pager --full status agent-nocturno
+"""
+
 def _extract_release_payload(release, platform):
     if not release or not release.file:
         return []
@@ -250,6 +409,73 @@ def downloads_page(request):
     for platform, metadata in SUPPORTED_PLATFORMS.items():
         cards.append({'platform': platform, 'title': metadata['title'], 'release': get_active_release(platform)})
     return render(request, 'agent_downloads/downloads.html', {'cards': cards})
+
+
+@login_required
+@require_http_methods(['POST'])
+def generate_install_command(request, platform):
+    if platform not in SUPPORTED_PLATFORMS:
+        return HttpResponse(status=404)
+
+    org = user_org(request.user)
+    if not org:
+        return HttpResponse('Usuario sin organización.', status=403)
+
+    enrollment = EnrollmentToken.generate(org=org, created_by=request.user, hours=24)
+    base_url = request.build_absolute_uri('/')[:-1]
+
+    if platform == AgentRelease.PLATFORM_WINDOWS:
+        command = (
+            f'powershell -NoProfile -ExecutionPolicy Bypass -Command '
+            f'"irm \'{base_url}/install/windows.ps1?token={enrollment.token}\' | iex"'
+        )
+    else:
+        command = f'curl -fsSL "{base_url}/install/linux.sh?token={enrollment.token}" | sudo bash'
+
+    return HttpResponse(command, content_type='text/plain')
+
+
+@require_http_methods(['GET'])
+def install_windows_script(request):
+    token, error = _validate_enrollment_token(request.GET.get('token'))
+    if error:
+        return error
+    return HttpResponse(_build_windows_installer_script(request, token.token), content_type='text/x-powershell')
+
+
+@require_http_methods(['GET'])
+def install_linux_script(request):
+    token, error = _validate_enrollment_token(request.GET.get('token'))
+    if error:
+        return error
+    return HttpResponse(_build_linux_installer_script(request, token.token), content_type='text/x-shellscript')
+
+
+@require_http_methods(['GET'])
+def install_agent_windows_zip(request):
+    files = _base_install_agent_files(AgentRelease.PLATFORM_WINDOWS)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode='w', compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
+    response = HttpResponse(buf.getvalue(), content_type='application/zip')
+    response['Content-Disposition'] = 'attachment; filename="windows.zip"'
+    return response
+
+
+@require_http_methods(['GET'])
+def install_agent_linux_tar(request):
+    files = _base_install_agent_files(AgentRelease.PLATFORM_LINUX)
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode='w:gz') as archive:
+        for name, content in files.items():
+            info = tarfile.TarInfo(name=name)
+            info.size = len(content)
+            info.mode = 0o644
+            archive.addfile(info, io.BytesIO(content))
+    response = HttpResponse(buf.getvalue(), content_type='application/gzip')
+    response['Content-Disposition'] = 'attachment; filename="linux.tar.gz"'
+    return response
 
 
 @login_required

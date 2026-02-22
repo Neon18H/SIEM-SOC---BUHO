@@ -304,3 +304,41 @@ Categorías soportadas:
 - `suspicious_powershell`: `EncodedCommand` o shell sospechoso.
 
 Cada detección puede generar alerta con mapeo MITRE (`mitre_tactic`, `mitre_technique_id`) y actualizar `EndpointRisk`.
+
+## Instalación one-liner desde el SIEM (sin release activo)
+
+### Endpoints de instalación
+- `GET /install/windows.ps1?token=<EnrollmentToken>`
+- `GET /install/linux.sh?token=<EnrollmentToken>`
+- `GET /install/agent/windows.zip`
+- `GET /install/agent/linux.tar.gz`
+
+Los scripts validan token de enroll, generan `soc_url` dinámicamente desde la request, descargan payload del mismo SIEM y crean servicio (`nssm` en Windows, `systemd` en Linux).
+
+### Flujo UI
+1. Abrir `GET /agents/downloads/` autenticado.
+2. Click en **Generar comando Windows** o **Generar comando Linux**.
+3. Copiar y ejecutar comando mostrado (token expira en 24h).
+
+### Comandos esperados
+```bash
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm 'https://<SOC>/install/windows.ps1?token=XXXX' | iex"
+curl -fsSL "https://<SOC>/install/linux.sh?token=XXXX" | sudo bash
+```
+
+### Prueba rápida Windows
+1. Abrir PowerShell como Administrador.
+2. Ejecutar one-liner generado.
+3. Validar servicio:
+   ```powershell
+   Get-Service agent-nocturno
+   Get-Content C:\ProgramData\AgentNocturno\install.log -Tail 50
+   ```
+
+### Prueba rápida Linux
+1. Ejecutar one-liner con sudo.
+2. Validar servicio/log:
+   ```bash
+   sudo systemctl status agent-nocturno --no-pager
+   sudo tail -n 50 /var/log/agent-nocturno/agent.log
+   ```

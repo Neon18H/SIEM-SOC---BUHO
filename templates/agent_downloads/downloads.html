@@ -28,9 +28,21 @@
         <div class="alert alert-warning py-2">No existe release activo para esta plataforma.</div>
         {% endif %}
 
-        <div class="d-flex flex-wrap gap-2">
+        <div class="d-flex flex-wrap gap-2 mb-3">
           <a class="btn btn-outline-info" href="{% url 'agent_downloads:download_installer' card.platform %}">Descargar instalador</a>
           <a class="btn btn-primary" href="{% url 'agent_downloads:download_bundle' card.platform %}">Descarga rápida (preconfigurada)</a>
+        </div>
+
+        <div class="border rounded p-3 bg-body-tertiary">
+          <div class="d-flex gap-2 flex-wrap">
+            {% if card.platform == 'windows' %}
+            <button class="btn btn-sm btn-outline-light" data-generate-command="windows" type="button">Generar comando Windows</button>
+            {% else %}
+            <button class="btn btn-sm btn-outline-light" data-generate-command="linux" type="button">Generar comando Linux</button>
+            {% endif %}
+            <button class="btn btn-sm btn-success d-none" data-copy-command type="button">Copiar comando</button>
+          </div>
+          <pre class="small mt-2 mb-0 d-none" data-command-output></pre>
         </div>
       </div>
     </div>
@@ -38,3 +50,5 @@
   {% endfor %}
 </div>
 {% endblock %}
+
+<script src="{% static 'js/agent_downloads.js' %}"></script>

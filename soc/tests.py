@@ -100,6 +100,24 @@ class EnrollmentAndIngestOrgEnforcementTests(TestCase):
         self.org1 = Organization.objects.create(name='Tenant One')
         self.org2 = Organization.objects.create(name='Tenant Two')
 
+    def test_enroll_rejects_expired_token(self):
+        from .models import EnrollmentToken
+        token = EnrollmentToken.generate(org=self.org1, created_by=None, hours=1)
+        token.expires_at = timezone.now() - timezone.timedelta(minutes=1)
+        token.save(update_fields=['expires_at'])
+
+        response = self.client.post(
+            reverse('api_enroll'),
+            data={
+                'token': token.token,
+                'hostname': 'h1',
+                'os': 'linux',
+                'ip': '10.10.10.10',
+            },
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 403)
+
     def test_enroll_assigns_org_from_token(self):
         from .models import EnrollmentToken
         token = EnrollmentToken.generate(org=self.org1, created_by=None, hours=1)

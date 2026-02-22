@@ -27,7 +27,7 @@ class AgentEnrollView(APIView):
         serializer.is_valid(raise_exception=True)
         token = get_object_or_404(EnrollmentToken, token=serializer.validated_data['token'], used=False)
         if token.expires_at < timezone.now():
-            return Response({'detail': 'Token expirado'}, status=400)
+            return Response({'detail': 'Token expirado'}, status=403)
 
         raw_agent_key = secrets.token_urlsafe(36)
         agent = Agent.objects.create(
