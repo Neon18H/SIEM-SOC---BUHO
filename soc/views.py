@@ -2,7 +2,7 @@ import json
 import secrets
 from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
-from django.db.models import Count, F, Q
+from django.db.models import Count, F, Q, Max
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from .auth import AgentKeyAuthentication, IsAdminOrAnalyst, user_org
 from .models import Agent, Alert, Case, EnrollmentToken, IRAction, LogEvent, Rule
 from .serializers import AlertSerializer, CaseSerializer, EnrollmentSerializer, IngestSerializer, LogEventSerializer, RuleSerializer
-from .services import correlate_login_pattern, enrich_with_ioc, evaluate_rules, import_iocs, kpis_for_org, normalize_payload, register_parsing_error
+from .services import correlate_login_pattern, enrich_with_ioc, evaluate_rules, import_iocs, kpis_for_org, normalize_payload, process_endpoint_event, register_parsing_error
 from .throttles import IngestRateThrottle
 
 
@@ -86,6 +86,7 @@ class IngestView(APIView):
         enrich_with_ioc(event)
         evaluate_rules(event)
         correlate_login_pattern(agent.organization, event)
+        process_endpoint_event(event)
 
         if Alert.objects.filter(event=event).exists():
             try:
@@ -269,6 +270,57 @@ def dashboard_view(request):
         'recent_alerts': recent_alerts,
     }
     return render(request, 'soc/dashboard.html', ctx)
+
+
+@login_required
+def endpoints_view(request):
+    org = user_org(request.user)
+    qs = Agent.objects.filter(organization=org).select_related('endpoint_risk')
+    q = request.GET
+    if q.get('status'):
+        qs = qs.filter(status=q['status'])
+    if q.get('os'):
+        qs = qs.filter(os__icontains=q['os'])
+    if q.get('org'):
+        qs = qs.filter(organization__name__icontains=q['org'])
+    if q.get('risk_min'):
+        qs = qs.filter(endpoint_risk__score__gte=q['risk_min'])
+
+    since_24h = timezone.now() - timezone.timedelta(hours=24)
+    agents = qs.annotate(
+        risk_score=Max('endpoint_risk__score'),
+        alerts_24h=Count('logevent__alert', filter=Q(logevent__alert__created_at__gte=since_24h), distinct=True),
+    ).order_by('-risk_score', '-last_seen')
+    return render(request, 'soc/endpoints.html', {'agents': agents})
+
+
+@login_required
+def endpoint_detail_view(request, endpoint_id):
+    org = user_org(request.user)
+    agent = get_object_or_404(Agent, id=endpoint_id, organization=org)
+    since_24h = timezone.now() - timezone.timedelta(hours=24)
+    events = LogEvent.objects.filter(organization=org, agent=agent, ts__gte=since_24h).order_by('-ts')
+
+    telemetry = list(events.filter(category='telemetry').order_by('ts').values('ts', 'raw_json'))
+    chart_labels = [row['ts'].strftime('%H:%M') for row in telemetry]
+    cpu_data = [row['raw_json'].get('cpu', 0) for row in telemetry]
+    ram_data = [row['raw_json'].get('ram', 0) for row in telemetry]
+
+    ctx = {
+        'agent': agent,
+        'risk': getattr(agent, 'endpoint_risk', None),
+        'top_alerts': Alert.objects.filter(organization=org, event__agent=agent).order_by('-created_at')[:5],
+        'telemetry_events': events.filter(category='telemetry')[:50],
+        'user_events': events.filter(category='user_activity')[:50],
+        'command_events': events.filter(category='commandline')[:50],
+        'service_events': events.filter(category='service')[:50],
+        'file_events': events.filter(category='file_activity')[:50],
+        'alerts': Alert.objects.filter(organization=org, event__agent=agent).order_by('-created_at')[:50],
+        'chart_labels': json.dumps(chart_labels),
+        'chart_cpu': json.dumps(cpu_data),
+        'chart_ram': json.dumps(ram_data),
+    }
+    return render(request, 'soc/endpoint_detail.html', ctx)
 
 
 @login_required

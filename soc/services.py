@@ -3,14 +3,23 @@ import io
 import json
 import re
 from datetime import timedelta
+
 from django.db.models import Count
 from django.utils import timezone
-from .models import Alert, CorrelationRecord, IOC, LogEvent, ParsingError, Rule
+
+from .models import Alert, CorrelationRecord, EndpointRisk, IOC, LogEvent, ParsingError, Rule
+
+MITRE_MAPPING = {
+    'brute_force': ('Credential Access', 'T1110'),
+    'suspicious_execution': ('Execution', 'T1059'),
+    'new_admin_user': ('Persistence', 'T1136'),
+    'suspicious_powershell': ('Execution', 'T1059.001'),
+}
 
 
 def normalize_payload(payload: dict):
     parsed = {
-        'timestamp': payload.get('ts'),
+        'timestamp': payload.get('ts').isoformat() if hasattr(payload.get('ts'), 'isoformat') else payload.get('ts'),
         'ip': payload.get('ip'),
         'user': payload.get('user', ''),
         'host': payload.get('host', ''),
@@ -26,6 +35,9 @@ def normalize_payload(payload: dict):
     if 'malware' in msg:
         parsed['action'] = 'malware_detected'
 
+    raw = payload.get('raw') or {}
+    if isinstance(raw, dict):
+        parsed.update(raw)
     return parsed
 
 
@@ -122,6 +134,99 @@ def enrich_with_ioc(event: LogEvent):
             title='Threat Intel match',
             details=', '.join(hits),
         )
+
+
+def _to_float(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _append_risk(agent, points, reason):
+    endpoint_risk, _ = EndpointRisk.objects.get_or_create(organization=agent.organization, agent=agent)
+    reasons = list(endpoint_risk.reasons or [])
+    reasons.append({
+        'ts': timezone.now().isoformat(),
+        'reason': reason,
+        'points': points,
+    })
+    endpoint_risk.reasons = reasons[-20:]
+    endpoint_risk.score = min(100, endpoint_risk.score + points)
+    endpoint_risk.save(update_fields=['score', 'reasons', 'updated_at'])
+
+
+def _create_detection_alert(event, key, title, details=''):
+    tactic, technique_id = MITRE_MAPPING.get(key, ('', ''))
+    return Alert.objects.create(
+        organization=event.organization,
+        event=event,
+        severity='High',
+        title=title,
+        details=details,
+        mitre_tactic=tactic,
+        mitre_technique_id=technique_id,
+    )
+
+
+def process_endpoint_event(event: LogEvent):
+    raw = event.raw_json if isinstance(event.raw_json, dict) else {}
+    category = (event.category or '').lower()
+
+    if category == 'telemetry':
+        agent = event.agent
+        agent.current_cpu = _to_float(raw.get('cpu'))
+        agent.current_ram = _to_float(raw.get('ram'))
+        agent.current_disk = _to_float(raw.get('disk'))
+        agent.current_gpu = _to_float(raw.get('gpu'))
+        agent.save(update_fields=['current_cpu', 'current_ram', 'current_disk', 'current_gpu'])
+
+    if category == 'user_activity':
+        action = (raw.get('action') or '').lower()
+        role = (raw.get('role') or '').lower()
+        if action in {'admin_added', 'role_elevated'} or (action == 'new_user' and role == 'admin'):
+            _append_risk(event.agent, 15, 'new admin user detected')
+            _create_detection_alert(event, 'new_admin_user', 'New admin user detected', json.dumps(raw))
+
+        if action == 'failed_login':
+            window_start = event.ts - timedelta(minutes=10)
+            fails = LogEvent.objects.filter(
+                organization=event.organization,
+                agent=event.agent,
+                category='user_activity',
+                ts__gte=window_start,
+                raw_json__action='failed_login',
+            ).count()
+            if fails >= 5:
+                _append_risk(event.agent, 10, 'brute-force pattern')
+                _create_detection_alert(event, 'brute_force', 'Brute force pattern detected', f'failed logins={fails}')
+
+    if category == 'commandline':
+        cmd = (raw.get('cmd') or event.message or '').lower()
+        if 'encodedcommand' in cmd or ('bash' in cmd and any(k in cmd for k in ['curl ', 'wget ', 'base64 -d'])):
+            _append_risk(event.agent, 8, 'suspicious shell execution')
+            _create_detection_alert(event, 'suspicious_powershell', 'Suspicious command line detected', cmd)
+
+    if category == 'file_activity':
+        action = (raw.get('action') or '').lower()
+        path = (raw.get('path') or '').lower()
+        if action == 'execute' and any(temp_path in path for temp_path in ['/tmp/', '\\temp\\', '/var/tmp/']):
+            _append_risk(event.agent, 5, 'execution from temp path')
+            recent_cpu = LogEvent.objects.filter(
+                organization=event.organization,
+                agent=event.agent,
+                category='telemetry',
+                ts__gte=event.ts - timedelta(minutes=5),
+                raw_json__cpu__gte=80,
+            ).exists()
+            outbound = LogEvent.objects.filter(
+                organization=event.organization,
+                agent=event.agent,
+                category='network',
+                ts__gte=event.ts - timedelta(minutes=10),
+            ).exclude(raw_json__dst_ip__startswith='10.').exists()
+            if recent_cpu and outbound:
+                _create_detection_alert(event, 'suspicious_execution', 'Suspicious execution chain', json.dumps(raw))
 
 
 def import_iocs(org, content: str, file_type: str):
