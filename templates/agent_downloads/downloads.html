@@ -6,6 +6,11 @@
 {% endblock %}
 
 {% block content %}
+<div class="d-flex justify-content-end mb-3">
+  {% if request.user.userprofile.role == 'admin' or request.user.is_superuser %}
+    <a class="btn btn-outline-warning" href="{% url 'agent_downloads:releases_admin' %}">Administrar releases</a>
+  {% endif %}
+</div>
 <div class="row g-4 mt-2">
   {% for card in cards %}
   <div class="col-12 col-lg-6">
@@ -13,39 +18,23 @@
       <div class="card-body">
         <h5 class="card-title">{{ card.title }}</h5>
         {% if card.release %}
-        <p class="text-secondary mb-2">Versión actual: <strong>{{ card.release.version }}</strong></p>
+        <p class="text-secondary mb-2">Versión activa: <strong>{{ card.release.version }}</strong></p>
         <ul class="small mb-3">
           <li>SHA256: <code>{{ card.release.sha256 }}</code></li>
           <li>Fecha: {{ card.release.created_at|date:"Y-m-d H:i" }}</li>
-          <li>Notas: {{ card.release.release_notes|default:"Sin notas de release" }}</li>
           {% if card.release.file %}<li>Tamaño: {{ card.release.file.size|filesizeformat }}</li>{% endif %}
         </ul>
         {% else %}
-        <div class="alert alert-warning py-2">No hay release publicado aún</div>
+        <div class="alert alert-warning py-2">No existe release activo para esta plataforma.</div>
         {% endif %}
 
         <div class="d-flex flex-wrap gap-2">
-          <a class="btn btn-outline-info"
-             href="{% url 'agent_downloads:download_installer' card.platform %}">Descargar instalador</a>
-          <a class="btn btn-primary"
-             href="{% url 'agent_downloads:download_bundle' card.platform %}">Descarga rápida (preconfigurada)</a>
-          <button class="btn btn-outline-light" data-copy="curl -L {{ request.scheme }}://{{ request.get_host }}{% url 'agent_downloads:download_bundle' card.platform %}">Copiar comando</button>
+          <a class="btn btn-outline-info" href="{% url 'agent_downloads:download_installer' card.platform %}">Descargar instalador</a>
+          <a class="btn btn-primary" href="{% url 'agent_downloads:download_bundle' card.platform %}">Descarga rápida (preconfigurada)</a>
         </div>
       </div>
     </div>
   </div>
   {% endfor %}
 </div>
-
-<div class="toast-container position-fixed bottom-0 end-0 p-3">
-  <div id="copyToast" class="toast align-items-center text-bg-success border-0" role="alert">
-    <div class="d-flex">
-      <div class="toast-body">Comando copiado.</div>
-      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-    </div>
-  </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="{% static 'js/agent_downloads.js' %}"></script>
 {% endblock %}
