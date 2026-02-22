@@ -1,12 +1,14 @@
 import io
 import tarfile
+from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
-from soc.models import EnrollmentToken, Organization, UserProfile
+from soc.models import EnrollmentToken, Organization
 
 from .models import AgentRelease
 
@@ -15,9 +17,9 @@ class AgentDownloadsTests(TestCase):
     def setUp(self):
         self.org = Organization.objects.create(name='Org Test')
         self.user = User.objects.create_user(username='analyst', password='secret123')
-        profile=self.user.userprofile
-        profile.organization=self.org
-        profile.role='admin'
+        profile = self.user.userprofile
+        profile.organization = self.org
+        profile.role = 'admin'
         profile.save()
 
     def test_bundle_linux_generates_token_and_tar(self):
@@ -46,14 +48,13 @@ class AgentDownloadsTests(TestCase):
 
     def test_releases_admin_forbidden_non_admin(self):
         viewer = User.objects.create_user(username='viewer', password='secret123')
-        viewer_profile=viewer.userprofile
-        viewer_profile.organization=self.org
-        viewer_profile.role='viewer'
+        viewer_profile = viewer.userprofile
+        viewer_profile.organization = self.org
+        viewer_profile.role = 'viewer'
         viewer_profile.save()
         self.client.login(username='viewer', password='secret123')
         response = self.client.get(reverse('agent_downloads:releases_admin'))
         self.assertEqual(response.status_code, 403)
-
 
     def test_bundle_uses_user_org_for_token(self):
         self.client.login(username='analyst', password='secret123')
@@ -63,3 +64,25 @@ class AgentDownloadsTests(TestCase):
         token = EnrollmentToken.objects.latest('id')
         self.assertEqual(token.organization, self.org)
         self.assertEqual(token.created_by, self.user)
+
+    def test_install_script_rejects_invalid_token(self):
+        response = self.client.get('/install/windows.ps1?token=nope')
+        self.assertEqual(response.status_code, 404)
+
+    def test_install_script_rejects_expired_token(self):
+        token = EnrollmentToken.generate(org=self.org, created_by=self.user, hours=1)
+        token.expires_at = timezone.now() - timedelta(minutes=1)
+        token.save(update_fields=['expires_at'])
+
+        response = self.client.get(f'/install/linux.sh?token={token.token}')
+        self.assertEqual(response.status_code, 403)
+
+    def test_generate_install_command(self):
+        self.client.login(username='analyst', password='secret123')
+        response = self.client.post(reverse('agent_downloads:generate_install_command', args=['linux']))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('/install/linux.sh?token=', response.content.decode())
+
+    def test_install_agent_payload_endpoints(self):
+        self.assertEqual(self.client.get('/install/agent/windows.zip').status_code, 200)
+        self.assertEqual(self.client.get('/install/agent/linux.tar.gz').status_code, 200)
