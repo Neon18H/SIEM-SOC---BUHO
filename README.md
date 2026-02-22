@@ -192,3 +192,28 @@ python scripts/mock_agent.py
 - JWT para usuarios API.
 - `X-AGENT-KEY` para ingest de agentes.
 - Separación de datos por organización en todas las vistas/endpoint principales.
+
+---
+
+## Centro de Descargas del Agente
+
+### URLs
+- `GET /agents/downloads/`
+- `GET /agents/downloads/installer/<platform>/`
+- `GET /agents/downloads/bundle/<platform>/`
+
+### Cómo publicar un release
+1. Inicia sesión como admin y abre `/admin`.
+2. Crea un `AgentRelease` con plataforma (`linux` o `windows`), versión y notas.
+3. Sube el instalador en el campo `file` (se guarda en `MEDIA_ROOT/agents/`), o define `file_url` si usas storage externo.
+4. Calcula el SHA256 y guárdalo en el campo `sha256`:
+   ```bash
+   sha256sum ./agente-nocturno-linux-x86_64
+   ```
+5. Marca `is_active=True` en el release que quieres publicar para esa plataforma.
+6. (Opcional) Desactiva releases anteriores de la misma plataforma para evitar ambigüedad.
+
+### Notas operativas
+- La descarga rápida crea un `EnrollmentToken` de 24 horas para la organización del usuario.
+- Cada descarga genera auditoría en `DownloadAudit` con usuario, organización, IP, user agent y tipo (`installer`/`bundle`).
+- Las vistas de descarga requieren login y aplican rate-limit básico por usuario/plataforma.
