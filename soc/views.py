@@ -2,7 +2,7 @@ import json
 import secrets
 from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
-from django.db.models import Q
+from django.db.models import Count, F, Q
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
@@ -167,7 +167,107 @@ def threatintel_import_view(request):
 
 @login_required
 def dashboard_view(request):
-    ctx = {'kpis': kpis_for_org(user_org(request.user))}
+    org = user_org(request.user)
+    now = timezone.now()
+    last_24h = now - timezone.timedelta(hours=24)
+    prev_24h = last_24h - timezone.timedelta(hours=24)
+
+    events_qs = LogEvent.objects.filter(organization=org)
+    alerts_qs = Alert.objects.filter(organization=org)
+
+    current_events = events_qs.filter(ts__gte=last_24h)
+    previous_events = events_qs.filter(ts__gte=prev_24h, ts__lt=last_24h)
+
+    auth_current = current_events.filter(category__icontains='auth')
+    auth_previous = previous_events.filter(category__icontains='auth')
+
+    def trend(current, previous):
+        if current > previous:
+            return 'up'
+        if current < previous:
+            return 'down'
+        return 'flat'
+
+    total_events = current_events.count()
+    critical_alerts = alerts_qs.filter(created_at__gte=last_24h, severity='Critical').count()
+    auth_failures = auth_current.filter(Q(message__icontains='fail') | Q(message__icontains='invalid')).count()
+    auth_success = auth_current.filter(Q(message__icontains='success') | Q(message__icontains='accepted')).count()
+    agents_online = Agent.objects.filter(organization=org, status=Agent.STATUS_ONLINE).count()
+
+    mitre_counts = {}
+    mitre_alerts = alerts_qs.filter(created_at__gte=last_24h).select_related('rule')
+    for alert in mitre_alerts:
+        mitre_json = (alert.rule.mitre_json if alert.rule else {}) or {}
+        labels = []
+        if isinstance(mitre_json, dict):
+            if isinstance(mitre_json.get('techniques'), list):
+                labels.extend([str(x) for x in mitre_json['techniques'] if x])
+            if mitre_json.get('technique'):
+                labels.append(str(mitre_json['technique']))
+            if mitre_json.get('tactic'):
+                labels.append(str(mitre_json['tactic']))
+        if not labels:
+            labels = ['Unknown']
+        for label in labels:
+            mitre_counts[label] = mitre_counts.get(label, 0) + 1
+
+    os_distribution = {
+        row['os']: row['total']
+        for row in Agent.objects.filter(organization=org).values('os').annotate(total=Count('id')).order_by('-total')
+    }
+
+    top_agents = list(
+        current_events
+        .values(hostname=F('agent__hostname'))
+        .annotate(total=Count('id'))
+        .order_by('-total')[:5]
+    )
+    for agent in top_agents:
+        agent['hostname'] = agent['hostname'] or 'Unknown agent'
+
+    severities = {
+        'Critical': lambda q: q.filter(severity__gte=9),
+        'High': lambda q: q.filter(severity__gte=7, severity__lt=9),
+        'Medium': lambda q: q.filter(severity__gte=4, severity__lt=7),
+        'Low': lambda q: q.filter(severity__lt=4),
+    }
+    labels = []
+    datasets = {name: [] for name in severities}
+    for hour_offset in range(23, -1, -1):
+        hour_end = now - timezone.timedelta(hours=hour_offset)
+        hour_start = hour_end - timezone.timedelta(hours=1)
+        hour_events = events_qs.filter(ts__gte=hour_start, ts__lt=hour_end)
+        labels.append(hour_end.strftime('%H:%M'))
+        for severity_name, filter_builder in severities.items():
+            datasets[severity_name].append(filter_builder(hour_events).count())
+
+    time_series_data = {
+        'labels': labels,
+        'datasets': datasets,
+    }
+
+    recent_alerts = alerts_qs.select_related('event', 'assignee').order_by('-created_at')[:12]
+
+    ctx = {
+        'kpis': {
+            'total_events': total_events,
+            'critical_alerts': critical_alerts,
+            'auth_failures': auth_failures,
+            'auth_success': auth_success,
+            'agents_online': agents_online,
+        },
+        'trends': {
+            'total_events': trend(total_events, previous_events.count()),
+            'critical_alerts': trend(critical_alerts, alerts_qs.filter(created_at__gte=prev_24h, created_at__lt=last_24h, severity='Critical').count()),
+            'auth_failures': trend(auth_failures, auth_previous.filter(Q(message__icontains='fail') | Q(message__icontains='invalid')).count()),
+            'auth_success': trend(auth_success, auth_previous.filter(Q(message__icontains='success') | Q(message__icontains='accepted')).count()),
+        },
+        'mitre_distribution': mitre_counts,
+        'os_distribution': os_distribution,
+        'top_agents': top_agents,
+        'time_series_data': json.dumps(time_series_data),
+        'recent_alerts': recent_alerts,
+    }
     return render(request, 'soc/dashboard.html', ctx)
 
 
