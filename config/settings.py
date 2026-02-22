@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'django_filters',
     'soc',
     'apps.accounts',
+    'apps.agent_downloads',
 ]
 
 MIDDLEWARE = [
@@ -74,11 +75,14 @@ TEMPLATES = [
 ]
 WSGI_APPLICATION = 'config.wsgi.application'
 
+DATABASE_URL = os.environ.get('DATABASE_URL', f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
+DATABASE_SSL_REQUIRE = DATABASE_URL.startswith(('postgres://', 'postgresql://', 'pgsql://', 'postgis://'))
+
 DATABASES = {
     'default': dj_database_url.parse(
-        os.environ.get('DATABASE_URL'),
+        DATABASE_URL,
         conn_max_age=600,
-        ssl_require=True,
+        ssl_require=DATABASE_SSL_REQUIRE,
     )
 }
 
@@ -98,6 +102,9 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 SECURE_SSL_REDIRECT = get_bool_env('DJANGO_SECURE_SSL_REDIRECT', False)
 
@@ -154,3 +161,5 @@ CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', '')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', CELERY_BROKER_URL)
 
 LOG_RETENTION_DAYS = int(os.getenv('LOG_RETENTION_DAYS', '90'))
+
+AGENT_SOC_URL = os.getenv('AGENT_SOC_URL', 'https://soc.example.local')
